@@ -70,12 +70,14 @@ npm start -- --base-url https://messenger.example.org --route-format pathname
 
 ## Открытие ссылок из браузера
 
-Сайт messenger.360.yandex.ru больше не открывает десктопный Messenger и уводит в Телемост. Связку восстанавливает Chrome-расширение [yandex-messenger-telemost-messenger-fix](https://github.com/viktoraseev/yandex-messenger-telemost-messenger-fix). Оно останавливает загрузку страницы `https://messenger.360.yandex.ru/#/chats/...` и открывает ту же ссылку со схемой `better-messenger:`.
+Сайты messenger.360.yandex.ru и telemost.360.yandex.ru не открывают десктопный Messenger: первый уводит в Телемост, второй открывает чат в браузере. Связку восстанавливает Chrome-расширение [yandex-messenger-telemost-messenger-fix](https://github.com/viktoraseev/yandex-messenger-telemost-messenger-fix). Оно останавливает загрузку страницы чата или сообщения и открывает ту же ссылку со схемой `better-messenger:`.
 
 Launcher регистрирует схему `better-messenger://`:
 
-- Принимаются только ссылки на чаты (`#/chats/...`) на хосте из `--base-url`. Остальные игнорируются.
-- Ссылка передаётся в Messenger как `ychat://<host>/#/chats/...`. Эту схему регистрирует Yandex Messenger.app, и ссылка уходит в уже запущенный процесс, второй не стартует.
+- Принимаются только ссылки на чаты и сообщения на хосте из `--base-url` или на `telemost.360.yandex.ru`. Остальные, например встречи Телемоста `/j/...`, игнорируются. Маршруты такие:
+  - `/#/chats/<chat>[/<ts>]` и `/#/join/<hash>[/<ts>[/<thread-ts>]]` — формат Messenger;
+  - `/chats/<chat>[/<ts>]` и `/join#<hash>[/<ts>[/<thread-ts>]]` — формат Телемоста.
+- Ссылка передаётся в Messenger с той же частью после схемы, но со схемой `ychat:`. Так же делает сама веб-версия. Эту схему регистрирует Yandex Messenger.app, и ссылка уходит в уже запущенный процесс, второй не стартует. Messenger 3.31.0 разбирает оба формата: `/join#<hash>/<ts>/<thread-ts>` превращается в маршрут `/join/:hash/:timestamp/:threadMessageTimestamp` и открывает сообщение в треде.
 - Если Messenger работает с патчем, ссылка открывается сразу. Если Messenger закрыт, launcher запускает его так же, как при повторном открытии Better Messenger, и передаёт ссылку после установки патча.
 - Если Messenger запущен, но патч за 30 секунд так и не появился (например, Messenger стартовал без inspector), ссылка всё равно открывается. Если Messenger не запустился, ссылка отбрасывается, а запись об этом остаётся в системном логе.
 
