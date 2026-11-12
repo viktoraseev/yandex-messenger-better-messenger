@@ -168,3 +168,23 @@ test('Escape dismisses a pending fallback without copying', () => {
     assert.equal(f.window.__betterMessenger.status().fallbackInsertions, 0);
     assert.equal(f.clipboard.length, 0);
 });
+
+test('a join link to a thread message is opened through the router history found from the React root', () => {
+    const f = fixture(); f.install();
+    const pushed = [];
+    const history = { location: { pathname: '/' }, push: route => pushed.push(route) };
+    f.body.__reactContainer$fixture = { memoizedProps: {}, child: { memoizedProps: { store: {} }, sibling: { memoizedProps: { history } } } };
+    const link = 'ychat://telemost.360.yandex.ru/join#e3830e10-f8fd-4e86-9a2c-9417b1e75496/1793875547366060/1793956421352019';
+    assert.equal(f.window.__betterMessenger.openThreadLink(link), true);
+    assert.deepEqual(pushed, ['/join/e3830e10-f8fd-4e86-9a2c-9417b1e75496/1793875547366060/1793956421352019']);
+    assert.equal(f.window.__betterMessenger.status().threadLinks, 1);
+    assert.equal(f.window.__betterMessenger.openThreadLink('ychat://messenger.360.yandex.ru/#/chats/0%2F0%2Fgroup/1793875547366060'), false);
+    assert.equal(pushed.length, 1);
+});
+
+test('without a router history the thread link is left to Messenger', () => {
+    const f = fixture(); f.install();
+    const link = 'ychat://messenger.360.yandex.ru/#/join/e3830e10-f8fd-4e86-9a2c-9417b1e75496/1793875547366060/1793956421352019';
+    assert.equal(f.window.__betterMessenger.openThreadLink(link), false);
+    assert.equal(f.window.__betterMessenger.status().threadLinks, 0);
+});

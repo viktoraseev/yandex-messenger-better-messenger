@@ -12,7 +12,7 @@ export function installRenderer(options) {
     const inserted = new Set();
     const buttonKeys = new Map();
     const replacedMenus = new Set();
-    const counters = { menuInsertions: 0, fallbackInsertions: 0, copies: 0, unresolved: 0 };
+    const counters = { menuInsertions: 0, fallbackInsertions: 0, copies: 0, unresolved: 0, threadLinks: 0 };
     const marker = 'data-better-messenger';
     const replacementMarker = 'data-better-messenger-replaced';
     const nativeLinks = '[data-test-tag="message-menu-copy-message-join-link"], [data-test-tag="message-menu-copy-message-link"]';
@@ -182,6 +182,34 @@ export function installRenderer(options) {
         if (event.key === 'Escape') { clearTimeout(fallbackTimer); dismissFallback(); }
     }
 
+    /// The react-router history of the app, found from the React root the way message keys are found from menus.
+    function routerHistory() {
+        for (const element of [document.body, ...(document.body?.children || [])]) {
+            if (!element) continue;
+            const property = Object.getOwnPropertyNames(element).find(name => name.startsWith('__reactContainer$'));
+            const queue = [property ? element[property] : element._reactRootContainer?._internalRoot?.current];
+            for (let index = 0; index < queue.length && index < 50000; index++) {
+                const fiber = queue[index];
+                const history = fiber?.memoizedProps?.history;
+                if (history && typeof history.push === 'function' && history.location) return history;
+                if (fiber?.child) queue.push(fiber.child);
+                if (fiber?.sibling) queue.push(fiber.sibling);
+            }
+        }
+        return null;
+    }
+
+    /// Opens a ychat: join link to a thread message through the router, as the web app does. False leaves the link
+    /// to Messenger's own deeplink handler.
+    function openThreadLink(link) {
+        const route = disposed ? null : threadRoute(link);
+        const history = route && routerHistory();
+        if (!history) return false;
+        history.push(route);
+        counters.threadLinks++;
+        return true;
+    }
+
     function uninstall() {
         disposed = true;
         observer?.disconnect();
@@ -207,7 +235,8 @@ export function installRenderer(options) {
     observer.observe(document.documentElement, { childList: true, subtree: true });
     window.__betterMessenger = {
         uninstall,
-        status: () => ({ version: '0.2.0', ...counters, messageResolved: Boolean(activeKey), routeFormat: options.routeFormat, baseUrl: options.baseUrl }),
+        openThreadLink,
+        status: () => ({ version: '0.3.0', ...counters, messageResolved: Boolean(activeKey), routeFormat: options.routeFormat, baseUrl: options.baseUrl }),
     };
     addToMenus();
     return window.__betterMessenger.status();

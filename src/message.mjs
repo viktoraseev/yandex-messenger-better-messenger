@@ -33,3 +33,18 @@ export function findMessageInFiber(start) {
     }
     return null;
 }
+
+/// Messenger 3.31.0 opens a ychat: join link to a thread message only as a thread panel over the chat on screen.
+/// Its router route /join/<invite hash>/<timestamp>/<thread message timestamp> does what the web app does: opens the
+/// chat with the thread's root message highlighted, then the thread at the reply. Returns that route for such a
+/// link in the Telemost (ychat://<host>/join#...) or Messenger (ychat://<host>/#/join/...) format, otherwise null.
+export function threadRoute(link) {
+    let url;
+    try { url = new URL(link); } catch { return null; }
+    if (url.protocol !== 'ychat:') return null;
+    const fragment = url.hash.slice(1);
+    const join = /^\/join\/?$/.test(url.pathname) ? fragment
+        : (url.pathname === '/' || url.pathname === '') && fragment.startsWith('/join/') ? fragment.slice('/join/'.length) : null;
+    const parts = join === null ? null : /^([A-Za-z0-9-]{1,128})\/(\d{13,17})\/(\d{13,17})$/.exec(join);
+    return parts ? `/join/${parts[1]}/${parts[2]}/${parts[3]}` : null;
+}

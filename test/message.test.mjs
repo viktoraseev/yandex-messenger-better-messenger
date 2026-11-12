@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMessageLink, findMessageInFiber } from '../src/message.mjs';
+import { buildMessageLink, findMessageInFiber, threadRoute } from '../src/message.mjs';
 import { assertLoopbackUrl } from '../src/inspector.mjs';
 import { rendererSource, installExpression } from '../src/injection.mjs';
 
@@ -66,4 +66,23 @@ test('injection source is syntactically valid and options remain data', () => {
     const options = { ...configuration, always: false, extra: '\"}); throw new Error(\"injection\"); //' };
     assert.doesNotThrow(() => new Function(rendererSource(options)));
     assert.doesNotThrow(() => new Function(installExpression(options)));
+});
+
+test('a join link to a thread message becomes the router route of the web app, other links do not', () => {
+    const message = 'e3830e10-f8fd-4e86-9a2c-9417b1e75496/1793875547366060/1793956421352019';
+    const route = `/join/${message}`;
+    assert.equal(threadRoute(`ychat://telemost.360.yandex.ru/join#${message}`), route);
+    assert.equal(threadRoute(`ychat://telemost.360.yandex.ru/join/#${message}`), route);
+    assert.equal(threadRoute(`ychat://messenger.360.yandex.ru/#/join/${message}`), route);
+    for (const link of [
+        'ychat://telemost.360.yandex.ru/join#e3830e10-f8fd-4e86-9a2c-9417b1e75496/1793875547366060',
+        'ychat://telemost.360.yandex.ru/join#e3830e10-f8fd-4e86-9a2c-9417b1e75496',
+        'ychat://messenger.360.yandex.ru/#/chats/0%2F0%2Fgroup/1793875547366060',
+        `https://telemost.360.yandex.ru/join#${message}`,
+        'ychat://telemost.360.yandex.ru/join#a%2F..%2Fsettings/1793875547366060/1793956421352019',
+        'ychat://telemost.360.yandex.ru/join#abc/1793875547366060/1793956421352019/extra',
+        'ychat://telemost.360.yandex.ru/joined#abc/1793875547366060/1793956421352019',
+        'not a url',
+        undefined,
+    ]) assert.equal(threadRoute(link), null, String(link));
 });

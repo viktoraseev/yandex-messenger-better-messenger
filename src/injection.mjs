@@ -1,10 +1,10 @@
-import { buildMessageLink, findMessageInFiber } from './message.mjs';
+import { buildMessageLink, findMessageInFiber, threadRoute } from './message.mjs';
 import { installRenderer } from './renderer.mjs';
 
 export const electronExpression = `(typeof require === 'function' ? require('electron') : process.mainModule.require('electron'))`;
 
 export function rendererSource(options) {
-    return `(() => { ${buildMessageLink.toString()}\n${findMessageInFiber.toString()}\nreturn (${installRenderer.toString()})(${JSON.stringify(options)}); })()`;
+    return `(() => { ${buildMessageLink.toString()}\n${findMessageInFiber.toString()}\n${threadRoute.toString()}\nreturn (${installRenderer.toString()})(${JSON.stringify(options)}); })()`;
 }
 
 export function installExpression(options) {
@@ -15,6 +15,7 @@ export function installExpression(options) {
         if (!/^(chats|q|Yandex Messenger|Яндекс Мессенджер)$/i.test(identity.name)) throw new Error('Not a recognized Messenger main process');
         if (electron.app.getAppPath() !== ${JSON.stringify(options.appPath + '/Contents/Resources/app.asar')}) throw new Error('Inspector belongs to a different Messenger installation');
         const source = ${JSON.stringify(source)};
+        ${threadRoute.toString()}
         if (globalThis.__betterMessengerMain?.source === source) return { identity, alreadyInstalled: true };
         await globalThis.__betterMessengerMain?.dispose?.();
         globalThis.__betterMessengerDisabled = false;
@@ -31,7 +32,25 @@ export function installExpression(options) {
             if (disposed || !isMessenger(webContents)) return null;
             return webContents.executeJavaScript(source, true);
         };
+        // Messenger delivers ychat: links to the window with webContents.send('deeplink', { url }). A join link to a
+        // thread message goes to the router through the renderer patch; anything else, or a window without the
+        // patch, gets the original send.
+        const originalSends = new Map();
+        const routeThreadLinks = webContents => {
+            let owner = webContents;
+            while (owner && !Object.prototype.hasOwnProperty.call(owner, 'send')) owner = Object.getPrototypeOf(owner);
+            if (!owner || originalSends.has(owner)) return;
+            const send = owner.send;
+            originalSends.set(owner, send);
+            owner.send = function (channel, ...args) {
+                if (channel !== 'deeplink' || disposed || !isMessenger(this) || !threadRoute(args[0]?.url)) return send.call(this, channel, ...args);
+                this.executeJavaScript('window.__betterMessenger?.openThreadLink?.(' + JSON.stringify(args[0].url) + ') === true', true)
+                    .catch(() => false)
+                    .then(opened => { if (!opened && !this.isDestroyed()) send.call(this, channel, ...args); });
+            };
+        };
         const attach = webContents => {
+            routeThreadLinks(webContents);
             if (attached.has(webContents.id)) return;
             const loaded = () => { apply(webContents).catch(() => {}); };
             const destroyed = () => { attached.delete(webContents.id); };
@@ -52,9 +71,11 @@ export function installExpression(options) {
                 if (isMessenger(webContents)) await webContents.executeJavaScript('window.__betterMessenger?.uninstall?.()', true).catch(() => {});
             }
             attached.clear();
+            for (const [owner, send] of originalSends) owner.send = send;
+            originalSends.clear();
             delete globalThis.__betterMessengerMain;
         };
-        globalThis.__betterMessengerMain = { dispose, version: '0.2.0', identity, source };
+        globalThis.__betterMessengerMain = { dispose, version: '0.3.0', identity, source };
         const windows = [];
         for (const webContents of electron.webContents.getAllWebContents()) {
             if (!isMessenger(webContents)) continue;
